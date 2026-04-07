@@ -92,6 +92,10 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		finalStatus := "completed"
 		var finalError string
 
+		// Token usage accumulators
+		var totalInputTokens, totalOutputTokens, totalCacheRead, totalCacheWrite int64
+		var lastModel string
+
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 
@@ -109,6 +113,11 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			switch msg.Type {
 			case "assistant":
 				b.handleAssistant(msg, msgCh, &output)
+				// Extract model name from assistant messages
+				var mu claudeMessageUsage
+				if err := json.Unmarshal(msg.Message, &mu); err == nil && mu.Model != "" {
+					lastModel = mu.Model
+				}
 			case "user":
 				b.handleUser(msg, msgCh)
 			case "system":
@@ -125,6 +134,13 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 				if msg.IsError {
 					finalStatus = "failed"
 					finalError = msg.ResultText
+				}
+				// Extract total token usage from the result message
+				if msg.Usage != nil {
+					totalInputTokens = msg.Usage.InputTokens
+					totalOutputTokens = msg.Usage.OutputTokens
+					totalCacheRead = msg.Usage.CacheReadInputTokens
+					totalCacheWrite = msg.Usage.CacheCreationInputTokens
 				}
 			case "log":
 				if msg.Log != nil {
@@ -157,11 +173,16 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		b.cfg.Logger.Info("claude finished", "pid", cmd.Process.Pid, "status", finalStatus, "duration", duration.Round(time.Millisecond).String())
 
 		resCh <- Result{
-			Status:     finalStatus,
-			Output:     output.String(),
-			Error:      finalError,
-			DurationMs: duration.Milliseconds(),
-			SessionID:  sessionID,
+			Status:           finalStatus,
+			Output:           output.String(),
+			Error:            finalError,
+			DurationMs:       duration.Milliseconds(),
+			SessionID:        sessionID,
+			InputTokens:      totalInputTokens,
+			OutputTokens:     totalOutputTokens,
+			CacheReadTokens:  totalCacheRead,
+			CacheWriteTokens: totalCacheWrite,
+			Model:            lastModel,
 		}
 	}()
 
@@ -273,12 +294,23 @@ type claudeSDKMessage struct {
 	DurationMs float64 `json:"duration_ms,omitempty"`
 	NumTurns   int     `json:"num_turns,omitempty"`
 
+	// result usage (populated on "result" messages)
+	Usage *claudeResultUsage `json:"usage,omitempty"`
+
 	// log fields
 	Log *claudeLogEntry `json:"log,omitempty"`
 
 	// control request fields
 	RequestID string          `json:"request_id,omitempty"`
 	Request   json.RawMessage `json:"request,omitempty"`
+}
+
+// claudeResultUsage is the usage block on "result" type messages.
+type claudeResultUsage struct {
+	InputTokens              int64 `json:"input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 }
 
 type claudeLogEntry struct {
@@ -289,6 +321,16 @@ type claudeLogEntry struct {
 type claudeMessageContent struct {
 	Role    string             `json:"role"`
 	Content []claudeContentBlock `json:"content"`
+}
+
+type claudeMessageUsage struct {
+	Model string `json:"model"`
+	Usage *struct {
+		InputTokens              int64 `json:"input_tokens"`
+		OutputTokens             int64 `json:"output_tokens"`
+		CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+		CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+	} `json:"usage"`
 }
 
 type claudeContentBlock struct {

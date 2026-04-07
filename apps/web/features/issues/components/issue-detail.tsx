@@ -73,6 +73,8 @@ import { useIssueSubscribers } from "@/features/issues/hooks/use-issue-subscribe
 import { ReactionBar } from "@/components/common/reaction-bar";
 import { useFileUpload } from "@/shared/hooks/use-file-upload";
 import { timeAgo } from "@/shared/utils";
+import { formatTokens } from "@/features/runtimes/utils";
+import type { AgentTask } from "@/shared/types";
 
 function shortDate(date: string | null): string {
   if (!date) return "—";
@@ -152,6 +154,93 @@ function PropRow({
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Issue Usage Section (per-issue token/cost tracking)
+// ---------------------------------------------------------------------------
+
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+  "claude-sonnet-4-5": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  "claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  "claude-opus-4-5": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "claude-opus-4-6": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+};
+
+function estimateTaskCost(task: AgentTask): number {
+  const model = task.model ?? "";
+  let pricing = MODEL_PRICING[model];
+  if (!pricing) {
+    for (const [key, p] of Object.entries(MODEL_PRICING)) {
+      if (model.startsWith(key)) { pricing = p; break; }
+    }
+  }
+  if (!pricing) return 0;
+  return (
+    ((task.input_tokens ?? 0) * pricing.input +
+      (task.output_tokens ?? 0) * pricing.output +
+      (task.cache_read_tokens ?? 0) * pricing.cacheRead +
+      (task.cache_write_tokens ?? 0) * pricing.cacheWrite) / 1_000_000
+  );
+}
+
+function IssueUsageSection({ issueId }: { issueId: string }) {
+  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [usageOpen, setUsageOpen] = useState(true);
+
+  useEffect(() => {
+    api.listTasksByIssue(issueId).then(setTasks).catch(console.error);
+  }, [issueId]);
+
+  const tasksWithUsage = tasks.filter((t) => t.input_tokens != null);
+  if (tasksWithUsage.length === 0) return null;
+
+  const totalInput = tasksWithUsage.reduce((sum, t) => sum + (t.input_tokens ?? 0), 0);
+  const totalOutput = tasksWithUsage.reduce((sum, t) => sum + (t.output_tokens ?? 0), 0);
+  const totalCacheRead = tasksWithUsage.reduce((sum, t) => sum + (t.cache_read_tokens ?? 0), 0);
+  const totalCacheWrite = tasksWithUsage.reduce((sum, t) => sum + (t.cache_write_tokens ?? 0), 0);
+  const totalCost = tasksWithUsage.reduce((sum, t) => sum + estimateTaskCost(t), 0);
+
+  return (
+    <div>
+      <button
+        className={`flex w-full items-center gap-1 text-xs font-medium transition-colors mb-2 ${usageOpen ? "" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setUsageOpen(!usageOpen)}
+      >
+        <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${usageOpen ? "rotate-90" : ""}`} />
+        Usage
+      </button>
+      {usageOpen && (
+        <div className="space-y-0.5 pl-2">
+          <PropRow label="Input">
+            <span className="text-muted-foreground">{formatTokens(totalInput)}</span>
+          </PropRow>
+          <PropRow label="Output">
+            <span className="text-muted-foreground">{formatTokens(totalOutput)}</span>
+          </PropRow>
+          {totalCacheRead > 0 && (
+            <PropRow label="Cache Read">
+              <span className="text-muted-foreground">{formatTokens(totalCacheRead)}</span>
+            </PropRow>
+          )}
+          {totalCacheWrite > 0 && (
+            <PropRow label="Cache Write">
+              <span className="text-muted-foreground">{formatTokens(totalCacheWrite)}</span>
+            </PropRow>
+          )}
+          {totalCost > 0 && (
+            <PropRow label="Est. Cost">
+              <span className="text-muted-foreground">${totalCost.toFixed(2)}</span>
+            </PropRow>
+          )}
+          <PropRow label="Runs">
+            <span className="text-muted-foreground">{tasksWithUsage.length}</span>
+          </PropRow>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -1057,6 +1146,9 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
               </PropRow>
             </div>}
           </div>
+
+          {/* Usage section (token/cost tracking) */}
+          <IssueUsageSection issueId={issueId} />
 
         </div>
       </div>

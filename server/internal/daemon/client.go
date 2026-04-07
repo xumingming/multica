@@ -99,7 +99,16 @@ func (c *Client) ReportTaskMessages(ctx context.Context, taskID string, messages
 	}, nil)
 }
 
-func (c *Client) CompleteTask(ctx context.Context, taskID, output, branchName, sessionID, workDir string) error {
+// TaskUsage holds per-task token usage data.
+type TaskUsage struct {
+	InputTokens      int64  `json:"input_tokens,omitempty"`
+	OutputTokens     int64  `json:"output_tokens,omitempty"`
+	CacheReadTokens  int64  `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int64  `json:"cache_write_tokens,omitempty"`
+	Model            string `json:"model,omitempty"`
+}
+
+func (c *Client) CompleteTask(ctx context.Context, taskID, output, branchName, sessionID, workDir string, usage TaskUsage) error {
 	body := map[string]any{"output": output}
 	if branchName != "" {
 		body["branch_name"] = branchName
@@ -110,13 +119,42 @@ func (c *Client) CompleteTask(ctx context.Context, taskID, output, branchName, s
 	if workDir != "" {
 		body["work_dir"] = workDir
 	}
+	if usage.InputTokens > 0 {
+		body["input_tokens"] = usage.InputTokens
+	}
+	if usage.OutputTokens > 0 {
+		body["output_tokens"] = usage.OutputTokens
+	}
+	if usage.CacheReadTokens > 0 {
+		body["cache_read_tokens"] = usage.CacheReadTokens
+	}
+	if usage.CacheWriteTokens > 0 {
+		body["cache_write_tokens"] = usage.CacheWriteTokens
+	}
+	if usage.Model != "" {
+		body["model"] = usage.Model
+	}
 	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/tasks/%s/complete", taskID), body, nil)
 }
 
-func (c *Client) FailTask(ctx context.Context, taskID, errMsg string) error {
-	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/tasks/%s/fail", taskID), map[string]any{
-		"error": errMsg,
-	}, nil)
+func (c *Client) FailTask(ctx context.Context, taskID, errMsg string, usage TaskUsage) error {
+	body := map[string]any{"error": errMsg}
+	if usage.InputTokens > 0 {
+		body["input_tokens"] = usage.InputTokens
+	}
+	if usage.OutputTokens > 0 {
+		body["output_tokens"] = usage.OutputTokens
+	}
+	if usage.CacheReadTokens > 0 {
+		body["cache_read_tokens"] = usage.CacheReadTokens
+	}
+	if usage.CacheWriteTokens > 0 {
+		body["cache_write_tokens"] = usage.CacheWriteTokens
+	}
+	if usage.Model != "" {
+		body["model"] = usage.Model
+	}
+	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/tasks/%s/fail", taskID), body, nil)
 }
 
 // GetTaskStatus returns the current status of a task. Used by the daemon to

@@ -44,7 +44,13 @@ export interface AgentTask {
   agent_id: string;
   runtime_id: string;
   issue_id: string;
-  status: "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
+  status:
+    | "queued"
+    | "dispatched"
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled";
   priority: number;
   dispatched_at: string | null;
   started_at: string | null;
@@ -52,6 +58,11 @@ export interface AgentTask {
   result: unknown;
   error: string | null;
   created_at: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  model: string | null;
 }
 
 export interface Agent {
@@ -148,7 +159,12 @@ export interface SetAgentSkillsRequest {
   skill_ids: string[];
 }
 
-export type RuntimePingStatus = "pending" | "running" | "completed" | "failed" | "timeout";
+export type RuntimePingStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "timeout";
 
 export interface RuntimePing {
   id: string;

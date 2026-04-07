@@ -64,4 +64,22 @@ type TaskResult struct {
 	EnvType    string `json:"env_type,omitempty"`
 	SessionID  string `json:"session_id,omitempty"` // Claude session ID for future resumption
 	WorkDir    string `json:"work_dir,omitempty"`   // working directory used during execution
+
+	// Per-task token usage
+	InputTokens      int64  `json:"input_tokens,omitempty"`
+	OutputTokens     int64  `json:"output_tokens,omitempty"`
+	CacheReadTokens  int64  `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int64  `json:"cache_write_tokens,omitempty"`
+	Model            string `json:"model,omitempty"`
+}
+
+// usage returns the token usage as a TaskUsage for the client.
+func (r TaskResult) usage() TaskUsage {
+	return TaskUsage{
+		InputTokens:      r.InputTokens,
+		OutputTokens:     r.OutputTokens,
+		CacheReadTokens:  r.CacheReadTokens,
+		CacheWriteTokens: r.CacheWriteTokens,
+		Model:            r.Model,
+	}
 }

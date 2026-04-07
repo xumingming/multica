@@ -53,7 +53,7 @@ const cancelAgentTask = `-- name: CancelAgentTask :one
 UPDATE agent_task_queue
 SET status = 'cancelled', completed_at = now()
 WHERE id = $1 AND status IN ('queued', 'dispatched', 'running')
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 func (q *Queries) CancelAgentTask(ctx context.Context, id pgtype.UUID) (AgentTaskQueue, error) {
@@ -76,6 +76,11 @@ func (q *Queries) CancelAgentTask(ctx context.Context, id pgtype.UUID) (AgentTas
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }
@@ -117,7 +122,7 @@ WHERE id = (
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 // Claims the next queued task for an agent, enforcing per-issue serialization:
@@ -144,22 +149,33 @@ func (q *Queries) ClaimAgentTask(ctx context.Context, agentID pgtype.UUID) (Agen
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }
 
 const completeAgentTask = `-- name: CompleteAgentTask :one
 UPDATE agent_task_queue
-SET status = 'completed', completed_at = now(), result = $2, session_id = $3, work_dir = $4
+SET status = 'completed', completed_at = now(), result = $2, session_id = $3, work_dir = $4,
+    input_tokens = $5, output_tokens = $6, cache_read_tokens = $7, cache_write_tokens = $8, model = $9
 WHERE id = $1 AND status = 'running'
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 type CompleteAgentTaskParams struct {
-	ID        pgtype.UUID `json:"id"`
-	Result    []byte      `json:"result"`
-	SessionID pgtype.Text `json:"session_id"`
-	WorkDir   pgtype.Text `json:"work_dir"`
+	ID               pgtype.UUID `json:"id"`
+	Result           []byte      `json:"result"`
+	SessionID        pgtype.Text `json:"session_id"`
+	WorkDir          pgtype.Text `json:"work_dir"`
+	InputTokens      pgtype.Int8 `json:"input_tokens"`
+	OutputTokens     pgtype.Int8 `json:"output_tokens"`
+	CacheReadTokens  pgtype.Int8 `json:"cache_read_tokens"`
+	CacheWriteTokens pgtype.Int8 `json:"cache_write_tokens"`
+	Model            pgtype.Text `json:"model"`
 }
 
 func (q *Queries) CompleteAgentTask(ctx context.Context, arg CompleteAgentTaskParams) (AgentTaskQueue, error) {
@@ -168,6 +184,11 @@ func (q *Queries) CompleteAgentTask(ctx context.Context, arg CompleteAgentTaskPa
 		arg.Result,
 		arg.SessionID,
 		arg.WorkDir,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.CacheReadTokens,
+		arg.CacheWriteTokens,
+		arg.Model,
 	)
 	var i AgentTaskQueue
 	err := row.Scan(
@@ -187,6 +208,11 @@ func (q *Queries) CompleteAgentTask(ctx context.Context, arg CompleteAgentTaskPa
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }
@@ -272,7 +298,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 const createAgentTask = `-- name: CreateAgentTask :one
 INSERT INTO agent_task_queue (agent_id, runtime_id, issue_id, status, priority, trigger_comment_id)
 VALUES ($1, $2, $3, 'queued', $4, $5)
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 type CreateAgentTaskParams struct {
@@ -309,24 +335,43 @@ func (q *Queries) CreateAgentTask(ctx context.Context, arg CreateAgentTaskParams
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }
 
 const failAgentTask = `-- name: FailAgentTask :one
 UPDATE agent_task_queue
-SET status = 'failed', completed_at = now(), error = $2
+SET status = 'failed', completed_at = now(), error = $2,
+    input_tokens = $3, output_tokens = $4, cache_read_tokens = $5, cache_write_tokens = $6, model = $7
 WHERE id = $1 AND status IN ('dispatched', 'running')
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 type FailAgentTaskParams struct {
-	ID    pgtype.UUID `json:"id"`
-	Error pgtype.Text `json:"error"`
+	ID               pgtype.UUID `json:"id"`
+	Error            pgtype.Text `json:"error"`
+	InputTokens      pgtype.Int8 `json:"input_tokens"`
+	OutputTokens     pgtype.Int8 `json:"output_tokens"`
+	CacheReadTokens  pgtype.Int8 `json:"cache_read_tokens"`
+	CacheWriteTokens pgtype.Int8 `json:"cache_write_tokens"`
+	Model            pgtype.Text `json:"model"`
 }
 
 func (q *Queries) FailAgentTask(ctx context.Context, arg FailAgentTaskParams) (AgentTaskQueue, error) {
-	row := q.db.QueryRow(ctx, failAgentTask, arg.ID, arg.Error)
+	row := q.db.QueryRow(ctx, failAgentTask,
+		arg.ID,
+		arg.Error,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.CacheReadTokens,
+		arg.CacheWriteTokens,
+		arg.Model,
+	)
 	var i AgentTaskQueue
 	err := row.Scan(
 		&i.ID,
@@ -345,6 +390,11 @@ func (q *Queries) FailAgentTask(ctx context.Context, arg FailAgentTaskParams) (A
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }
@@ -461,7 +511,7 @@ func (q *Queries) GetAgentInWorkspace(ctx context.Context, arg GetAgentInWorkspa
 }
 
 const getAgentTask = `-- name: GetAgentTask :one
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id FROM agent_task_queue
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model FROM agent_task_queue
 WHERE id = $1
 `
 
@@ -485,6 +535,40 @@ func (q *Queries) GetAgentTask(ctx context.Context, id pgtype.UUID) (AgentTaskQu
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
+	)
+	return i, err
+}
+
+const getIssueTokenUsage = `-- name: GetIssueTokenUsage :one
+SELECT
+    COALESCE(SUM(input_tokens), 0)::bigint AS total_input_tokens,
+    COALESCE(SUM(output_tokens), 0)::bigint AS total_output_tokens,
+    COALESCE(SUM(cache_read_tokens), 0)::bigint AS total_cache_read_tokens,
+    COALESCE(SUM(cache_write_tokens), 0)::bigint AS total_cache_write_tokens
+FROM agent_task_queue
+WHERE issue_id = $1 AND input_tokens IS NOT NULL
+`
+
+type GetIssueTokenUsageRow struct {
+	TotalInputTokens      int64 `json:"total_input_tokens"`
+	TotalOutputTokens     int64 `json:"total_output_tokens"`
+	TotalCacheReadTokens  int64 `json:"total_cache_read_tokens"`
+	TotalCacheWriteTokens int64 `json:"total_cache_write_tokens"`
+}
+
+func (q *Queries) GetIssueTokenUsage(ctx context.Context, issueID pgtype.UUID) (GetIssueTokenUsageRow, error) {
+	row := q.db.QueryRow(ctx, getIssueTokenUsage, issueID)
+	var i GetIssueTokenUsageRow
+	err := row.Scan(
+		&i.TotalInputTokens,
+		&i.TotalOutputTokens,
+		&i.TotalCacheReadTokens,
+		&i.TotalCacheWriteTokens,
 	)
 	return i, err
 }
@@ -564,7 +648,7 @@ func (q *Queries) HasPendingTaskForIssueAndAgent(ctx context.Context, arg HasPen
 }
 
 const listActiveTasksByIssue = `-- name: ListActiveTasksByIssue :many
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id FROM agent_task_queue
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model FROM agent_task_queue
 WHERE issue_id = $1 AND status IN ('dispatched', 'running')
 ORDER BY created_at DESC
 `
@@ -595,6 +679,11 @@ func (q *Queries) ListActiveTasksByIssue(ctx context.Context, issueID pgtype.UUI
 			&i.SessionID,
 			&i.WorkDir,
 			&i.TriggerCommentID,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -607,7 +696,7 @@ func (q *Queries) ListActiveTasksByIssue(ctx context.Context, issueID pgtype.UUI
 }
 
 const listAgentTasks = `-- name: ListAgentTasks :many
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id FROM agent_task_queue
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model FROM agent_task_queue
 WHERE agent_id = $1
 ORDER BY created_at DESC
 `
@@ -638,6 +727,11 @@ func (q *Queries) ListAgentTasks(ctx context.Context, agentID pgtype.UUID) ([]Ag
 			&i.SessionID,
 			&i.WorkDir,
 			&i.TriggerCommentID,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -742,7 +836,7 @@ func (q *Queries) ListAllAgents(ctx context.Context, workspaceID pgtype.UUID) ([
 }
 
 const listPendingTasksByRuntime = `-- name: ListPendingTasksByRuntime :many
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id FROM agent_task_queue
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model FROM agent_task_queue
 WHERE runtime_id = $1 AND status IN ('queued', 'dispatched')
 ORDER BY priority DESC, created_at ASC
 `
@@ -773,6 +867,11 @@ func (q *Queries) ListPendingTasksByRuntime(ctx context.Context, runtimeID pgtyp
 			&i.SessionID,
 			&i.WorkDir,
 			&i.TriggerCommentID,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -785,7 +884,7 @@ func (q *Queries) ListPendingTasksByRuntime(ctx context.Context, runtimeID pgtyp
 }
 
 const listTasksByIssue = `-- name: ListTasksByIssue :many
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id FROM agent_task_queue
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model FROM agent_task_queue
 WHERE issue_id = $1
 ORDER BY created_at DESC
 `
@@ -816,6 +915,11 @@ func (q *Queries) ListTasksByIssue(ctx context.Context, issueID pgtype.UUID) ([]
 			&i.SessionID,
 			&i.WorkDir,
 			&i.TriggerCommentID,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -864,7 +968,7 @@ const startAgentTask = `-- name: StartAgentTask :one
 UPDATE agent_task_queue
 SET status = 'running', started_at = now()
 WHERE id = $1 AND status = 'dispatched'
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model
 `
 
 func (q *Queries) StartAgentTask(ctx context.Context, id pgtype.UUID) (AgentTaskQueue, error) {
@@ -887,6 +991,11 @@ func (q *Queries) StartAgentTask(ctx context.Context, id pgtype.UUID) (AgentTask
 		&i.SessionID,
 		&i.WorkDir,
 		&i.TriggerCommentID,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.Model,
 	)
 	return i, err
 }

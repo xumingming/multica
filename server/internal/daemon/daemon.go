@@ -776,7 +776,7 @@ func (d *Daemon) handleTask(ctx context.Context, task Task) {
 
 	if err := d.client.StartTask(ctx, task.ID); err != nil {
 		taskLog.Error("start task failed", "error", err)
-		if failErr := d.client.FailTask(ctx, task.ID, fmt.Sprintf("start task failed: %s", err.Error())); failErr != nil {
+		if failErr := d.client.FailTask(ctx, task.ID, fmt.Sprintf("start task failed: %s", err.Error()), TaskUsage{}); failErr != nil {
 			taskLog.Error("fail task after start error", "error", failErr)
 		}
 		return
@@ -821,7 +821,7 @@ func (d *Daemon) handleTask(ctx context.Context, task Task) {
 
 	if err != nil {
 		taskLog.Error("task failed", "error", err)
-		if failErr := d.client.FailTask(ctx, task.ID, err.Error()); failErr != nil {
+		if failErr := d.client.FailTask(ctx, task.ID, err.Error(), TaskUsage{}); failErr != nil {
 			taskLog.Error("fail task callback failed", "error", failErr)
 		}
 		return
@@ -839,14 +839,14 @@ func (d *Daemon) handleTask(ctx context.Context, task Task) {
 
 	switch result.Status {
 	case "blocked":
-		if err := d.client.FailTask(ctx, task.ID, result.Comment); err != nil {
+		if err := d.client.FailTask(ctx, task.ID, result.Comment, result.usage()); err != nil {
 			taskLog.Error("report blocked task failed", "error", err)
 		}
 	default:
 		taskLog.Info("task completed", "status", result.Status)
-		if err := d.client.CompleteTask(ctx, task.ID, result.Comment, result.BranchName, result.SessionID, result.WorkDir); err != nil {
+		if err := d.client.CompleteTask(ctx, task.ID, result.Comment, result.BranchName, result.SessionID, result.WorkDir, result.usage()); err != nil {
 			taskLog.Error("complete task failed, falling back to fail", "error", err)
-			if failErr := d.client.FailTask(ctx, task.ID, fmt.Sprintf("complete task failed: %s", err.Error())); failErr != nil {
+			if failErr := d.client.FailTask(ctx, task.ID, fmt.Sprintf("complete task failed: %s", err.Error()), result.usage()); failErr != nil {
 				taskLog.Error("fail task fallback also failed", "error", failErr)
 			}
 		}
@@ -1111,10 +1111,15 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 			return TaskResult{}, fmt.Errorf("%s returned empty output", provider)
 		}
 		return TaskResult{
-			Status:    "completed",
-			Comment:   result.Output,
-			SessionID: result.SessionID,
-			WorkDir:   env.WorkDir,
+			Status:           "completed",
+			Comment:          result.Output,
+			SessionID:        result.SessionID,
+			WorkDir:          env.WorkDir,
+			InputTokens:      result.InputTokens,
+			OutputTokens:     result.OutputTokens,
+			CacheReadTokens:  result.CacheReadTokens,
+			CacheWriteTokens: result.CacheWriteTokens,
+			Model:            result.Model,
 		}, nil
 	case "timeout":
 		return TaskResult{}, fmt.Errorf("%s timed out after %s", provider, d.cfg.AgentTimeout)
@@ -1123,7 +1128,15 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 		if errMsg == "" {
 			errMsg = fmt.Sprintf("%s execution %s", provider, result.Status)
 		}
-		return TaskResult{Status: "blocked", Comment: errMsg}, nil
+		return TaskResult{
+			Status:           "blocked",
+			Comment:          errMsg,
+			InputTokens:      result.InputTokens,
+			OutputTokens:     result.OutputTokens,
+			CacheReadTokens:  result.CacheReadTokens,
+			CacheWriteTokens: result.CacheWriteTokens,
+			Model:            result.Model,
+		}, nil
 	}
 }
 

@@ -26,6 +26,15 @@ type TaskService struct {
 	Bus     *events.Bus
 }
 
+// TaskUsage holds per-task token usage data.
+type TaskUsage struct {
+	InputTokens      *int64
+	OutputTokens     *int64
+	CacheReadTokens  *int64
+	CacheWriteTokens *int64
+	Model            string
+}
+
 func NewTaskService(q *db.Queries, hub *realtime.Hub, bus *events.Bus) *TaskService {
 	return &TaskService{Queries: q, Hub: hub, Bus: bus}
 }
@@ -211,12 +220,17 @@ func (s *TaskService) StartTask(ctx context.Context, taskID pgtype.UUID) (*db.Ag
 
 // CompleteTask marks a task as completed.
 // Issue status is NOT changed here — the agent manages it via the CLI.
-func (s *TaskService) CompleteTask(ctx context.Context, taskID pgtype.UUID, result []byte, sessionID, workDir string) (*db.AgentTaskQueue, error) {
+func (s *TaskService) CompleteTask(ctx context.Context, taskID pgtype.UUID, result []byte, sessionID, workDir string, usage TaskUsage) (*db.AgentTaskQueue, error) {
 	task, err := s.Queries.CompleteAgentTask(ctx, db.CompleteAgentTaskParams{
-		ID:        taskID,
-		Result:    result,
-		SessionID: pgtype.Text{String: sessionID, Valid: sessionID != ""},
-		WorkDir:   pgtype.Text{String: workDir, Valid: workDir != ""},
+		ID:              taskID,
+		Result:          result,
+		SessionID:       pgtype.Text{String: sessionID, Valid: sessionID != ""},
+		WorkDir:         pgtype.Text{String: workDir, Valid: workDir != ""},
+		InputTokens:     optionalInt8(usage.InputTokens),
+		OutputTokens:    optionalInt8(usage.OutputTokens),
+		CacheReadTokens: optionalInt8(usage.CacheReadTokens),
+		CacheWriteTokens: optionalInt8(usage.CacheWriteTokens),
+		Model:           pgtype.Text{String: usage.Model, Valid: usage.Model != ""},
 	})
 	if err != nil {
 		// Log the current task state to help debug why the update matched no rows.
@@ -261,10 +275,15 @@ func (s *TaskService) CompleteTask(ctx context.Context, taskID pgtype.UUID, resu
 
 // FailTask marks a task as failed.
 // Issue status is NOT changed here — the agent manages it via the CLI.
-func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg string) (*db.AgentTaskQueue, error) {
+func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg string, usage TaskUsage) (*db.AgentTaskQueue, error) {
 	task, err := s.Queries.FailAgentTask(ctx, db.FailAgentTaskParams{
-		ID:    taskID,
-		Error: pgtype.Text{String: errMsg, Valid: true},
+		ID:               taskID,
+		Error:            pgtype.Text{String: errMsg, Valid: true},
+		InputTokens:      optionalInt8(usage.InputTokens),
+		OutputTokens:     optionalInt8(usage.OutputTokens),
+		CacheReadTokens:  optionalInt8(usage.CacheReadTokens),
+		CacheWriteTokens: optionalInt8(usage.CacheWriteTokens),
+		Model:            pgtype.Text{String: usage.Model, Valid: usage.Model != ""},
 	})
 	if err != nil {
 		if existing, lookupErr := s.Queries.GetAgentTask(ctx, taskID); lookupErr == nil {
@@ -449,6 +468,14 @@ func (s *TaskService) broadcastIssueUpdated(issue db.Issue) {
 		ActorID:     "",
 		Payload:     map[string]any{"issue": issueToMap(issue, prefix)},
 	})
+}
+
+// optionalInt8 converts *int64 to pgtype.Int8 for nullable BIGINT columns.
+func optionalInt8(v *int64) pgtype.Int8 {
+	if v == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *v, Valid: true}
 }
 
 func (s *TaskService) getIssuePrefix(workspaceID pgtype.UUID) string {

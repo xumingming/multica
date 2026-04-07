@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/redact"
@@ -345,6 +346,13 @@ type TaskCompleteRequest struct {
 	Output    string `json:"output"`
 	SessionID string `json:"session_id"` // Claude session ID for future resumption
 	WorkDir   string `json:"work_dir"`   // working directory used during execution
+
+	// Per-task token usage
+	InputTokens      *int64 `json:"input_tokens,omitempty"`
+	OutputTokens     *int64 `json:"output_tokens,omitempty"`
+	CacheReadTokens  *int64 `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens *int64 `json:"cache_write_tokens,omitempty"`
+	Model            string `json:"model,omitempty"`
 }
 
 func (h *Handler) CompleteTask(w http.ResponseWriter, r *http.Request) {
@@ -357,7 +365,13 @@ func (h *Handler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, _ := json.Marshal(req)
-	task, err := h.TaskService.CompleteTask(r.Context(), parseUUID(taskID), result, req.SessionID, req.WorkDir)
+	task, err := h.TaskService.CompleteTask(r.Context(), parseUUID(taskID), result, req.SessionID, req.WorkDir, service.TaskUsage{
+		InputTokens:      req.InputTokens,
+		OutputTokens:     req.OutputTokens,
+		CacheReadTokens:  req.CacheReadTokens,
+		CacheWriteTokens: req.CacheWriteTokens,
+		Model:            req.Model,
+	})
 	if err != nil {
 		slog.Warn("complete task failed", "task_id", taskID, "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -382,7 +396,12 @@ func (h *Handler) GetTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 // FailTask marks a running task as failed.
 type TaskFailRequest struct {
-	Error string `json:"error"`
+	Error            string `json:"error"`
+	InputTokens      *int64 `json:"input_tokens,omitempty"`
+	OutputTokens     *int64 `json:"output_tokens,omitempty"`
+	CacheReadTokens  *int64 `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens *int64 `json:"cache_write_tokens,omitempty"`
+	Model            string `json:"model,omitempty"`
 }
 
 func (h *Handler) FailTask(w http.ResponseWriter, r *http.Request) {
@@ -394,7 +413,13 @@ func (h *Handler) FailTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.TaskService.FailTask(r.Context(), parseUUID(taskID), req.Error)
+	task, err := h.TaskService.FailTask(r.Context(), parseUUID(taskID), req.Error, service.TaskUsage{
+		InputTokens:      req.InputTokens,
+		OutputTokens:     req.OutputTokens,
+		CacheReadTokens:  req.CacheReadTokens,
+		CacheWriteTokens: req.CacheWriteTokens,
+		Model:            req.Model,
+	})
 	if err != nil {
 		slog.Warn("fail task failed", "task_id", taskID, "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())

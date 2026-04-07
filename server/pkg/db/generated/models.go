@@ -79,6 +79,11 @@ type AgentTaskQueue struct {
 	SessionID        pgtype.Text        `json:"session_id"`
 	WorkDir          pgtype.Text        `json:"work_dir"`
 	TriggerCommentID pgtype.UUID        `json:"trigger_comment_id"`
+	InputTokens      pgtype.Int8        `json:"input_tokens"`
+	OutputTokens     pgtype.Int8        `json:"output_tokens"`
+	CacheReadTokens  pgtype.Int8        `json:"cache_read_tokens"`
+	CacheWriteTokens pgtype.Int8        `json:"cache_write_tokens"`
+	Model            pgtype.Text        `json:"model"`
 }
 
 type Attachment struct {

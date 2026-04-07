@@ -105,7 +105,8 @@ RETURNING *;
 
 -- name: CompleteAgentTask :one
 UPDATE agent_task_queue
-SET status = 'completed', completed_at = now(), result = $2, session_id = $3, work_dir = $4
+SET status = 'completed', completed_at = now(), result = $2, session_id = $3, work_dir = $4,
+    input_tokens = $5, output_tokens = $6, cache_read_tokens = $7, cache_write_tokens = $8, model = $9
 WHERE id = $1 AND status = 'running'
 RETURNING *;
 
@@ -119,7 +120,8 @@ LIMIT 1;
 
 -- name: FailAgentTask :one
 UPDATE agent_task_queue
-SET status = 'failed', completed_at = now(), error = $2
+SET status = 'failed', completed_at = now(), error = $2,
+    input_tokens = $3, output_tokens = $4, cache_read_tokens = $5, cache_write_tokens = $6, model = $7
 WHERE id = $1 AND status IN ('dispatched', 'running')
 RETURNING *;
 
@@ -176,6 +178,15 @@ ORDER BY created_at DESC;
 SELECT * FROM agent_task_queue
 WHERE issue_id = $1
 ORDER BY created_at DESC;
+
+-- name: GetIssueTokenUsage :one
+SELECT
+    COALESCE(SUM(input_tokens), 0)::bigint AS total_input_tokens,
+    COALESCE(SUM(output_tokens), 0)::bigint AS total_output_tokens,
+    COALESCE(SUM(cache_read_tokens), 0)::bigint AS total_cache_read_tokens,
+    COALESCE(SUM(cache_write_tokens), 0)::bigint AS total_cache_write_tokens
+FROM agent_task_queue
+WHERE issue_id = $1 AND input_tokens IS NOT NULL;
 
 -- name: UpdateAgentStatus :one
 UPDATE agent SET status = $2, updated_at = now()

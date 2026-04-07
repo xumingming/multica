@@ -111,6 +111,13 @@ type AgentTaskResponse struct {
 	PriorSessionID   string         `json:"prior_session_id,omitempty"`    // session ID from a previous task on same issue
 	PriorWorkDir     string         `json:"prior_work_dir,omitempty"`     // work_dir from a previous task on same issue
 	TriggerCommentID *string        `json:"trigger_comment_id,omitempty"` // comment that triggered this task
+
+	// Per-task token usage
+	InputTokens      *int64  `json:"input_tokens"`
+	OutputTokens     *int64  `json:"output_tokens"`
+	CacheReadTokens  *int64  `json:"cache_read_tokens"`
+	CacheWriteTokens *int64  `json:"cache_write_tokens"`
+	Model            *string `json:"model"`
 }
 
 // TaskAgentData holds agent info included in claim responses so the daemon
@@ -141,6 +148,11 @@ func taskToResponse(t db.AgentTaskQueue) AgentTaskResponse {
 		Error:            textToPtr(t.Error),
 		CreatedAt:        timestampToString(t.CreatedAt),
 		TriggerCommentID: uuidToPtr(t.TriggerCommentID),
+		InputTokens:      int8ToPtr(t.InputTokens),
+		OutputTokens:     int8ToPtr(t.OutputTokens),
+		CacheReadTokens:  int8ToPtr(t.CacheReadTokens),
+		CacheWriteTokens: int8ToPtr(t.CacheWriteTokens),
+		Model:            textToPtr(t.Model),
 	}
 }
 

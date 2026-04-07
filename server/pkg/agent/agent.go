@@ -69,6 +69,13 @@ type Result struct {
 	Error      string // error message if failed
 	DurationMs int64
 	SessionID  string
+
+	// Per-task token usage (accumulated from all API turns)
+	InputTokens      int64
+	OutputTokens     int64
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	Model            string // primary model used
 }
 
 // Config configures a Backend instance.
