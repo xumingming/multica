@@ -27,9 +27,11 @@ export interface Member {
 }
 
 export type FontFamily = "geist-sans" | "inter" | "plus-jakarta-sans" | "dm-sans" | "system-ui";
+export type CodeFontFamily = "geist-mono" | "fira-code" | "jetbrains-mono" | "source-code-pro" | "system-mono";
 
 export interface UserPreferences {
   fontFamily?: FontFamily;
+  codeFontFamily?: CodeFontFamily;
 }
 
 export interface User {

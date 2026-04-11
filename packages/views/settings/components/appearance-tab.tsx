@@ -6,7 +6,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { useAuthStore } from "@multica/core/auth";
 import { api } from "@multica/core/api";
 import { toast } from "sonner";
-import type { FontFamily } from "@multica/core/types";
+import type { FontFamily, CodeFontFamily } from "@multica/core/types";
 
 const LIGHT_COLORS = {
   titleBar: "#e8e8e8",
@@ -89,12 +89,20 @@ const themeOptions = [
   { value: "system" as const, label: "System" },
 ];
 
-const fontOptions: { value: FontFamily; label: string; preview: string }[] = [
-  { value: "geist-sans", label: "Geist Sans", preview: "The quick brown fox jumps over the lazy dog" },
-  { value: "inter", label: "Inter", preview: "The quick brown fox jumps over the lazy dog" },
-  { value: "plus-jakarta-sans", label: "Plus Jakarta Sans", preview: "The quick brown fox jumps over the lazy dog" },
-  { value: "dm-sans", label: "DM Sans", preview: "The quick brown fox jumps over the lazy dog" },
-  { value: "system-ui", label: "System", preview: "The quick brown fox jumps over the lazy dog" },
+const fontOptions: { value: FontFamily; label: string; description: string }[] = [
+  { value: "geist-sans", label: "Geist Sans", description: "Clean, modern sans-serif — the default" },
+  { value: "inter", label: "Inter", description: "Highly legible, widely used in web apps" },
+  { value: "plus-jakarta-sans", label: "Plus Jakarta Sans", description: "Geometric, modern feel" },
+  { value: "dm-sans", label: "DM Sans", description: "Clean and minimal contemporary style" },
+  { value: "system-ui", label: "System", description: "Uses your operating system's default font" },
+];
+
+const codeFontOptions: { value: CodeFontFamily; label: string; description: string }[] = [
+  { value: "geist-mono", label: "Geist Mono", description: "Matches the default UI style" },
+  { value: "fira-code", label: "Fira Code", description: "Popular with ligatures support" },
+  { value: "jetbrains-mono", label: "JetBrains Mono", description: "Designed for developers" },
+  { value: "source-code-pro", label: "Source Code Pro", description: "Adobe's classic monospace" },
+  { value: "system-mono", label: "System Mono", description: "Uses your OS default monospace font" },
 ];
 
 const fontFamilyMap: Record<FontFamily, string> = {
@@ -105,11 +113,83 @@ const fontFamilyMap: Record<FontFamily, string> = {
   "system-ui": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 
+const codeFontFamilyMap: Record<CodeFontFamily, string> = {
+  "geist-mono": "var(--font-mono)",
+  "fira-code": "var(--font-fira-code)",
+  "jetbrains-mono": "var(--font-jetbrains-mono)",
+  "source-code-pro": "var(--font-source-code-pro)",
+  "system-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+};
+
+function FontRadioOption<T extends string>({
+  value,
+  label,
+  description,
+  fontStyle,
+  active,
+  disabled,
+  onSelect,
+  previewText,
+}: {
+  value: T;
+  label: string;
+  description: string;
+  fontStyle: string;
+  active: boolean;
+  disabled: boolean;
+  onSelect: (v: T) => void;
+  previewText: string;
+}) {
+  return (
+    <button
+      role="radio"
+      aria-checked={active}
+      aria-label={`Select ${label} font`}
+      disabled={disabled}
+      onClick={() => onSelect(value)}
+      className={cn(
+        "flex items-center gap-4 rounded-lg border px-4 py-3 text-left transition-all",
+        active
+          ? "border-brand bg-brand/5"
+          : "border-border hover:border-foreground/20"
+      )}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-medium">{label}</span>
+          <span className="text-xs text-muted-foreground">{description}</span>
+        </div>
+        <div
+          className="mt-1.5 truncate text-sm text-foreground/70"
+          style={{ fontFamily: fontStyle }}
+        >
+          {previewText}
+        </div>
+      </div>
+      <div
+        className={cn(
+          "size-4 shrink-0 rounded-full border-2 transition-colors",
+          active
+            ? "border-brand bg-brand"
+            : "border-muted-foreground/30"
+        )}
+      >
+        {active && (
+          <div className="flex h-full items-center justify-center">
+            <div className="size-1.5 rounded-full bg-white" />
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
 export function AppearanceTab() {
   const { theme, setTheme } = useTheme();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const currentFont = user?.preferences?.fontFamily ?? "geist-sans";
+  const currentCodeFont = user?.preferences?.codeFontFamily ?? "geist-mono";
   const [saving, setSaving] = useState(false);
 
   const handleFontChange = async (fontFamily: FontFamily) => {
@@ -120,6 +200,19 @@ export function AppearanceTab() {
       setUser(updated);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update font");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCodeFontChange = async (codeFontFamily: CodeFontFamily) => {
+    if (codeFontFamily === currentCodeFont || saving) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateMe({ preferences: { codeFontFamily } });
+      setUser(updated);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update code font");
     } finally {
       setSaving(false);
     }
@@ -181,51 +274,42 @@ export function AppearanceTab() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">Font</h2>
-        <div className="grid gap-2" role="radiogroup" aria-label="Font family">
-          {fontOptions.map((opt) => {
-            const active = currentFont === opt.value;
-            return (
-              <button
-                key={opt.value}
-                role="radio"
-                aria-checked={active}
-                aria-label={`Select ${opt.label} font`}
-                disabled={saving}
-                onClick={() => handleFontChange(opt.value)}
-                className={cn(
-                  "flex items-center gap-4 rounded-lg border px-4 py-3 text-left transition-all",
-                  active
-                    ? "border-brand bg-brand/5"
-                    : "border-border hover:border-foreground/20"
-                )}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{opt.label}</div>
-                  <div
-                    className="mt-1 truncate text-xs text-muted-foreground"
-                    style={{ fontFamily: fontFamilyMap[opt.value] }}
-                  >
-                    {opt.preview}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    "size-4 shrink-0 rounded-full border-2 transition-colors",
-                    active
-                      ? "border-brand bg-brand"
-                      : "border-muted-foreground/30"
-                  )}
-                >
-                  {active && (
-                    <div className="flex h-full items-center justify-center">
-                      <div className="size-1.5 rounded-full bg-white" />
-                    </div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+        <h2 className="text-sm font-semibold">Interface Font</h2>
+        <p className="text-xs text-muted-foreground">The font used for all UI text — menus, labels, and descriptions.</p>
+        <div className="grid gap-2" role="radiogroup" aria-label="Interface font">
+          {fontOptions.map((opt) => (
+            <FontRadioOption
+              key={opt.value}
+              value={opt.value}
+              label={opt.label}
+              description={opt.description}
+              fontStyle={fontFamilyMap[opt.value]}
+              active={currentFont === opt.value}
+              disabled={saving}
+              onSelect={handleFontChange}
+              previewText="Assign tasks, track progress, ship together."
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold">Code Font</h2>
+        <p className="text-xs text-muted-foreground">The monospace font used for code blocks, inline code, and editors.</p>
+        <div className="grid gap-2" role="radiogroup" aria-label="Code font">
+          {codeFontOptions.map((opt) => (
+            <FontRadioOption
+              key={opt.value}
+              value={opt.value}
+              label={opt.label}
+              description={opt.description}
+              fontStyle={codeFontFamilyMap[opt.value]}
+              active={currentCodeFont === opt.value}
+              disabled={saving}
+              onSelect={handleCodeFontChange}
+              previewText="const task = await agent.run(issue);"
+            />
+          ))}
         </div>
       </section>
     </div>

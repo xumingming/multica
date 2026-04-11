@@ -63,3 +63,9 @@
 [data-font-family="plus-jakarta-sans"] { --font-sans: var(--font-plus-jakarta-sans); }
 [data-font-family="dm-sans"] { --font-sans: var(--font-dm-sans); }
 [data-font-family="system-ui"] { --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+/* Code font family switching via data attribute */
+[data-code-font-family="fira-code"] { --font-mono: var(--font-fira-code); }
+[data-code-font-family="jetbrains-mono"] { --font-mono: var(--font-jetbrains-mono); }
+[data-code-font-family="source-code-pro"] { --font-mono: var(--font-source-code-pro); }
+[data-code-font-family="system-mono"] { --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
