@@ -23,22 +23,28 @@ import (
 )
 
 type UserResponse struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Email     string  `json:"email"`
-	AvatarURL *string `json:"avatar_url"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	Email       string                 `json:"email"`
+	AvatarURL   *string                `json:"avatar_url"`
+	Preferences map[string]interface{} `json:"preferences"`
+	CreatedAt   string                 `json:"created_at"`
+	UpdatedAt   string                 `json:"updated_at"`
 }
 
 func userToResponse(u db.User) UserResponse {
+	prefs := map[string]interface{}{}
+	if len(u.Preferences) > 0 {
+		_ = json.Unmarshal(u.Preferences, &prefs)
+	}
 	return UserResponse{
-		ID:        uuidToString(u.ID),
-		Name:      u.Name,
-		Email:     u.Email,
-		AvatarURL: textToPtr(u.AvatarUrl),
-		CreatedAt: timestampToString(u.CreatedAt),
-		UpdatedAt: timestampToString(u.UpdatedAt),
+		ID:          uuidToString(u.ID),
+		Name:        u.Name,
+		Email:       u.Email,
+		AvatarURL:   textToPtr(u.AvatarUrl),
+		Preferences: prefs,
+		CreatedAt:   timestampToString(u.CreatedAt),
+		UpdatedAt:   timestampToString(u.UpdatedAt),
 	}
 }
 
@@ -332,8 +338,9 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateMeRequest struct {
-	Name      *string `json:"name"`
-	AvatarURL *string `json:"avatar_url"`
+	Name        *string                `json:"name"`
+	AvatarURL   *string                `json:"avatar_url"`
+	Preferences map[string]interface{} `json:"preferences,omitempty"`
 }
 
 type GoogleLoginRequest struct {
@@ -525,6 +532,14 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AvatarURL != nil {
 		params.AvatarUrl = pgtype.Text{String: strings.TrimSpace(*req.AvatarURL), Valid: true}
+	}
+	if req.Preferences != nil {
+		prefsJSON, err := json.Marshal(req.Preferences)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid preferences")
+			return
+		}
+		params.Preferences = prefsJSON
 	}
 
 	updatedUser, err := h.Queries.UpdateUser(r.Context(), params)

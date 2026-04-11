@@ -1,5 +1,5 @@
 import type { Issue, IssueStatus, IssuePriority, IssueAssigneeType } from "./issue";
-import type { MemberRole } from "./workspace";
+import type { MemberRole, UserPreferences } from "./workspace";
 import type { Project } from "./project";
 
 // Issue API
@@ -71,6 +71,7 @@ export interface SearchProjectsResponse {
 export interface UpdateMeRequest {
   name?: string;
   avatar_url?: string;
+  preferences?: Partial<UserPreferences>;
 }
 
 export interface CreateMemberRequest {

@@ -15,6 +15,7 @@ RETURNING *;
 UPDATE "user" SET
     name = COALESCE($2, name),
     avatar_url = COALESCE($3, avatar_url),
+    preferences = CASE WHEN sqlc.narg('preferences')::jsonb IS NOT NULL THEN preferences || sqlc.narg('preferences')::jsonb ELSE preferences END,
     updated_at = now()
 WHERE id = $1
 RETURNING *;

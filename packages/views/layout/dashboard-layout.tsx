@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@multica/ui/compo
 import { ModalRegistry } from "../modals/registry";
 import { AppSidebar } from "./app-sidebar";
 import { DashboardGuard } from "./dashboard-guard";
+import { FontSync } from "./font-sync";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -31,6 +32,7 @@ export function DashboardLayout({
         </div>
       }
     >
+      <FontSync />
       <SidebarProvider className="h-svh">
         <AppSidebar searchSlot={searchSlot} />
         <SidebarInset className="overflow-hidden">

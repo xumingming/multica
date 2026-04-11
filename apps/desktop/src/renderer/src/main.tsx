@@ -6,6 +6,9 @@ import "@fontsource/geist-sans/600.css";
 import "@fontsource/geist-sans/700.css";
 import "@fontsource/geist-mono/400.css";
 import "@fontsource/geist-mono/700.css";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/dm-sans";
 import "./globals.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);

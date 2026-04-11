@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO "user" (name, email, avatar_url)
 VALUES ($1, $2, $3)
-RETURNING id, name, email, avatar_url, created_at, updated_at
+RETURNING id, name, email, avatar_url, created_at, updated_at, preferences
 `
 
 type CreateUserParams struct {
@@ -33,12 +33,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Preferences,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, name, email, avatar_url, created_at, updated_at FROM "user"
+SELECT id, name, email, avatar_url, created_at, updated_at, preferences FROM "user"
 WHERE id = $1
 `
 
@@ -52,12 +53,13 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Preferences,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, avatar_url, created_at, updated_at FROM "user"
+SELECT id, name, email, avatar_url, created_at, updated_at, preferences FROM "user"
 WHERE email = $1
 `
 
@@ -71,6 +73,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Preferences,
 	)
 	return i, err
 }
@@ -79,19 +82,26 @@ const updateUser = `-- name: UpdateUser :one
 UPDATE "user" SET
     name = COALESCE($2, name),
     avatar_url = COALESCE($3, avatar_url),
+    preferences = CASE WHEN $4::jsonb IS NOT NULL THEN preferences || $4::jsonb ELSE preferences END,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, email, avatar_url, created_at, updated_at
+RETURNING id, name, email, avatar_url, created_at, updated_at, preferences
 `
 
 type UpdateUserParams struct {
-	ID        pgtype.UUID `json:"id"`
-	Name      string      `json:"name"`
-	AvatarUrl pgtype.Text `json:"avatar_url"`
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	AvatarUrl   pgtype.Text `json:"avatar_url"`
+	Preferences []byte      `json:"preferences"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser, arg.ID, arg.Name, arg.AvatarUrl)
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.ID,
+		arg.Name,
+		arg.AvatarUrl,
+		arg.Preferences,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -100,6 +110,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Preferences,
 	)
 	return i, err
 }

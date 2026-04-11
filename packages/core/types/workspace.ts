@@ -26,11 +26,18 @@ export interface Member {
   created_at: string;
 }
 
+export type FontFamily = "geist-sans" | "inter" | "plus-jakarta-sans" | "dm-sans" | "system-ui";
+
+export interface UserPreferences {
+  fontFamily?: FontFamily;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   avatar_url: string | null;
+  preferences: UserPreferences;
   created_at: string;
   updated_at: string;
 }

@@ -5,7 +5,7 @@ import { useActiveTitleSync } from "@/hooks/use-tab-sync";
 import { useTabStore, resolveRouteIcon } from "@/stores/tab-store";
 import { SidebarProvider } from "@multica/ui/components/ui/sidebar";
 import { ModalRegistry } from "@multica/views/modals/registry";
-import { AppSidebar, DashboardGuard } from "@multica/views/layout";
+import { AppSidebar, DashboardGuard, FontSync } from "@multica/views/layout";
 import { SearchCommand, SearchTrigger } from "@multica/views/search";
 import { ChatFab, ChatWindow } from "@multica/views/chat";
 import { DesktopNavigationProvider } from "@/platform/navigation";
@@ -73,6 +73,7 @@ export function DesktopShell() {
           </div>
         }
       >
+        <FontSync />
         <div className="flex h-screen">
           <SidebarProvider className="flex-1">
             <AppSidebar topSlot={<SidebarTopBar />} searchSlot={<SearchTrigger />} />
